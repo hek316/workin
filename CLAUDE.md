@@ -192,11 +192,17 @@ When working on Jira tickets, follow this workflow:
    - Use `mcp__atlassian__getJiraIssue` to fetch the ticket details
    - Identify all acceptance criteria and checklist items in the ticket description
 
-2. **Complete Development Tasks**
-   - Implement the required changes
-   - Ensure all acceptance criteria are met
+2. **Create Feature Branch**
+   - Create a new branch from `main` using the Jira ticket key
+   - Branch naming convention: `feature/{TICKET-KEY}` (e.g., `feature/WORK-123`)
+   - Use `git checkout -b feature/{TICKET-KEY}` to create and switch to the branch
 
-3. **Integration Testing (MANDATORY)**
+3. **Complete Development Tasks**
+   - Implement the required changes in the feature branch
+   - Ensure all acceptance criteria are met
+   - Make commits with descriptive messages referencing the ticket key
+
+4. **Integration Testing (MANDATORY)**
 
    **Before marking any Jira ticket as complete:**
 
@@ -212,26 +218,46 @@ When working on Jira tickets, follow this workflow:
      - Verify error handling and response formats
      - Check Firebase/Firestore data changes if applicable
 
-4. **Update Acceptance Criteria Checklist**
+5. **Update Acceptance Criteria Checklist**
    - After successful testing, update the ticket to mark checklist items as completed
    - Use `mcp__atlassian__editJiraIssue` to update the description with checked items
    - Change `[ ]` to `[x]` for completed acceptance criteria
 
-5. **Transition Ticket**
-   - Only after all acceptance criteria are verified and checked
+6. **Merge to Main**
+   - Switch back to main branch: `git checkout main`
+   - Merge the feature branch: `git merge feature/{TICKET-KEY}`
+   - Delete the feature branch: `git branch -d feature/{TICKET-KEY}`
+
+7. **Transition Ticket**
+   - Only after all acceptance criteria are verified and merged
    - Use `mcp__atlassian__transitionJiraIssue` to move the ticket to the appropriate status
 
 ### Example Workflow
 
 ```
 1. Fetch ticket: mcp__atlassian__getJiraIssue
-2. Implement changes in code
-3. Test with Playwright (frontend) or API calls (backend)
-4. Update checklist: mcp__atlassian__editJiraIssue (mark items as [x])
-5. Transition: mcp__atlassian__transitionJiraIssue (e.g., to "Done")
+2. Create branch: git checkout -b feature/WORK-123
+3. Implement changes in code
+4. Commit changes: git add . && git commit -m "WORK-123: Add feature XYZ"
+5. Test with Playwright (frontend) or API calls (backend)
+6. Update checklist: mcp__atlassian__editJiraIssue (mark items as [x])
+7. Merge: git checkout main && git merge feature/WORK-123
+8. Clean up: git branch -d feature/WORK-123
+9. Transition: mcp__atlassian__transitionJiraIssue (e.g., to "Done")
 ```
 
-**IMPORTANT**: Never mark a ticket as complete without integration testing. Manual verification through actual testing is required for all changes.
+### Git Branch Strategy
+
+- **Main Branch (`main`)**: Production-ready code
+- **Feature Branches (`feature/{TICKET-KEY}`)**: Individual Jira ticket work
+  - Created from `main`
+  - Merged back to `main` after ticket completion
+  - Deleted after successful merge
+
+**IMPORTANT**:
+- Never mark a ticket as complete without integration testing
+- Always work in a feature branch, never commit directly to `main`
+- Manual verification through actual testing is required for all changes
 
 ## Monitoring (Planned)
 
