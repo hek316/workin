@@ -1,0 +1,37 @@
+services:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    environment:
+      - NODE_ENV=development
+    networks:
+      - walkin-network
+    stdin_open: true
+    tty: true
+
+  backend:
+    build:
+      context: ./backend/walkin-backend
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./backend/walkin-backend:/app
+      - /app/.gradle
+      - /app/build
+    environment:
+      - SPRING_PROFILES_ACTIVE=dev
+      - JAVA_OPTS=-Xmx512m
+    networks:
+      - walkin-network
+
+networks:
+  walkin-network:
+    driver: bridge
