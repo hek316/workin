@@ -2,11 +2,17 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { getEmailError, getPasswordError } from '@/lib/validation';
+import { signIn } from '@/lib/firebase/auth';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export default function LoginPage() {
+  const router = useRouter();
+  const setUser = useAuthStore((state) => state.setUser);
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState<{
@@ -35,14 +41,20 @@ export default function LoginPage() {
       return;
     }
 
-    // TODO: SCRUM-14 - Implement Firebase Auth login
+    // Sign in with Firebase Auth
     setLoading(true);
     try {
-      console.log('Login attempt:', { email });
-      // Firebase Auth will be implemented in SCRUM-14
-      alert('로그인 기능은 SCRUM-14에서 구현됩니다');
+      const user = await signIn(email, password);
+      setUser(user);
+
+      // Redirect to dashboard
+      router.push('/dashboard');
     } catch (error) {
-      console.error('Login error:', error);
+      const errorMessage = error instanceof Error ? error.message : '로그인에 실패했습니다';
+      setErrors({
+        email: null,
+        password: errorMessage,
+      });
     } finally {
       setLoading(false);
     }

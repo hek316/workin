@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import {
@@ -10,8 +11,13 @@ import {
   getPasswordError,
   getPasswordConfirmError,
 } from '@/lib/validation';
+import { signUp } from '@/lib/firebase/auth';
+import { useAuthStore } from '@/store/useAuthStore';
 
 export default function SignupPage() {
+  const router = useRouter();
+  const setUser = useAuthStore((state) => state.setUser);
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -57,17 +63,26 @@ export default function SignupPage() {
       return;
     }
 
-    // TODO: SCRUM-14 - Implement Firebase Auth signup
+    // Sign up with Firebase Auth
     setLoading(true);
     try {
-      console.log('Signup attempt:', {
-        name: formData.name,
-        email: formData.email,
-      });
-      // Firebase Auth will be implemented in SCRUM-14
-      alert('회원가입 기능은 SCRUM-14에서 구현됩니다');
+      const user = await signUp(
+        formData.email,
+        formData.password,
+        formData.name
+      );
+      setUser(user);
+
+      // Redirect to dashboard
+      router.push('/dashboard');
     } catch (error) {
-      console.error('Signup error:', error);
+      const errorMessage = error instanceof Error ? error.message : '회원가입에 실패했습니다';
+      setErrors({
+        name: null,
+        email: null,
+        password: null,
+        confirmPassword: errorMessage,
+      });
     } finally {
       setLoading(false);
     }
