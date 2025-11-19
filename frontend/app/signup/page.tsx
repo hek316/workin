@@ -44,6 +44,7 @@ export default function SignupPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    console.log('회원가입 시작');
 
     // Validate all inputs
     const nameError = getNameError(formData.name);
@@ -60,22 +61,30 @@ export default function SignupPage() {
 
     // If there are errors, stop
     if (nameError || emailError || passwordError || confirmPasswordError) {
+      console.log('유효성 검사 실패');
       return;
     }
 
     // Sign up with Firebase Auth
     setLoading(true);
     try {
+      console.log('Firebase Auth 회원가입 시작...');
       const user = await signUp(
         formData.email,
         formData.password,
         formData.name
       );
+      console.log('회원가입 성공:', user);
+
       setUser(user);
+      console.log('Zustand 스토어 업데이트 완료');
 
       // Redirect to dashboard
+      console.log('대시보드로 리다이렉트 시도...');
       router.push('/dashboard');
+      console.log('router.push 호출 완료');
     } catch (error) {
+      console.error('회원가입 에러:', error);
       const errorMessage = error instanceof Error ? error.message : '회원가입에 실패했습니다';
       setErrors({
         name: null,
@@ -84,6 +93,7 @@ export default function SignupPage() {
         confirmPassword: errorMessage,
       });
     } finally {
+      console.log('finally 블록 실행');
       setLoading(false);
     }
   };

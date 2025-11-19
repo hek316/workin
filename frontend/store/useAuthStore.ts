@@ -12,6 +12,9 @@ interface AuthState {
   initialize: () => void;
 }
 
+// Global unsubscribe function to ensure only one listener exists
+let unsubscribe: (() => void) | null = null;
+
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
@@ -29,8 +32,13 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   initialize: () => {
+    // If already initialized, don't create another listener
+    if (unsubscribe) {
+      return;
+    }
+
     // Listen to Firebase Auth state changes
-    onAuthChange(async (firebaseUser) => {
+    unsubscribe = onAuthChange(async (firebaseUser) => {
       if (firebaseUser) {
         // User is signed in, get full user data from Firestore
         try {

@@ -11,9 +11,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const initialize = useAuthStore((state) => state.initialize);
 
   useEffect(() => {
-    // Initialize auth listener on mount
+    // Initialize auth listener on mount only once
     initialize();
-  }, [initialize]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty dependency array - only run once on mount
 
   return <>{children}</>;
 }
