@@ -1,13 +1,49 @@
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/Button';
+import {
+  getTodayAttendance,
+  recordCheckIn,
+  recordCheckOut
+} from '@/lib/firestore/attendance';
+import {
+  validateGPSForCheckIn,
+  validateGPSForCheckOut,
+  formatWorkHours,
+  formatTime,
+  GPSError
+} from '@/lib/gps';
+import type { Attendance } from '@/types';
 
 export default function DashboardPage() {
   const router = useRouter();
   const { user, isAuthenticated, isLoading, logout } = useAuthStore();
+
+  const [attendance, setAttendance] = useState<Attendance | null>(null);
+  const [loadingAttendance, setLoadingAttendance] = useState(true);
+  const [processingCheckIn, setProcessingCheckIn] = useState(false);
+  const [processingCheckOut, setProcessingCheckOut] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [currentWorkTime, setCurrentWorkTime] = useState<string>('');
+
+  // Fetch today's attendance
+  const fetchAttendance = useCallback(async () => {
+    if (!user) return;
+
+    try {
+      const todayAttendance = await getTodayAttendance(user.uid);
+      setAttendance(todayAttendance);
+    } catch (err) {
+      console.error('Error fetching attendance:', err);
+      setError('출퇴근 기록을 불러오는데 실패했습니다');
+    } finally {
+      setLoadingAttendance(false);
+    }
+  }, [user]);
 
   useEffect(() => {
     // Redirect to login if not authenticated
@@ -15,6 +51,96 @@ export default function DashboardPage() {
       router.push('/login');
     }
   }, [isAuthenticated, isLoading, router]);
+
+  useEffect(() => {
+    if (user) {
+      fetchAttendance();
+    }
+  }, [user, fetchAttendance]);
+
+  // Update current work time every minute
+  useEffect(() => {
+    if (!attendance?.checkIn || attendance?.checkOut) return;
+
+    const updateWorkTime = () => {
+      const now = new Date();
+      const diffMs = now.getTime() - attendance.checkIn!.time.getTime();
+      const diffHours = diffMs / (1000 * 60 * 60);
+      setCurrentWorkTime(formatWorkHours(diffHours));
+    };
+
+    updateWorkTime();
+    const interval = setInterval(updateWorkTime, 60000); // Update every minute
+
+    return () => clearInterval(interval);
+  }, [attendance]);
+
+  const handleCheckIn = async () => {
+    if (!user) return;
+
+    setProcessingCheckIn(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const validation = await validateGPSForCheckIn();
+
+      if (!validation.isValid || !validation.location) {
+        setError(validation.error?.message || 'GPS 검증에 실패했습니다');
+        return;
+      }
+
+      const newAttendance = await recordCheckIn(
+        user.uid,
+        user.name,
+        validation.location
+      );
+
+      setAttendance(newAttendance);
+
+      const statusText = newAttendance.checkIn?.status === 'late' ? ' (지각)' : '';
+      setSuccessMessage(`출근이 기록되었습니다${statusText} - ${formatTime(newAttendance.checkIn!.time)}`);
+    } catch (err) {
+      const gpsError = err as GPSError;
+      setError(gpsError.message || '출근 기록에 실패했습니다');
+    } finally {
+      setProcessingCheckIn(false);
+    }
+  };
+
+  const handleCheckOut = async () => {
+    if (!user) return;
+
+    setProcessingCheckOut(true);
+    setError(null);
+    setSuccessMessage(null);
+
+    try {
+      const validation = await validateGPSForCheckOut();
+
+      if (!validation.isValid || !validation.location) {
+        setError(validation.error?.message || 'GPS 검증에 실패했습니다');
+        return;
+      }
+
+      const newAttendance = await recordCheckOut(
+        user.uid,
+        validation.location
+      );
+
+      setAttendance(newAttendance);
+
+      const statusText = newAttendance.checkOut?.status === 'early' ? ' (조퇴)' : '';
+      setSuccessMessage(
+        `퇴근이 기록되었습니다${statusText} - ${formatTime(newAttendance.checkOut!.time)} (총 ${formatWorkHours(newAttendance.workHours!)})`
+      );
+    } catch (err) {
+      const gpsError = err as GPSError;
+      setError(gpsError.message || '퇴근 기록에 실패했습니다');
+    } finally {
+      setProcessingCheckOut(false);
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -45,7 +171,7 @@ export default function DashboardPage() {
         <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center">
             <h1 className="text-2xl font-bold text-gray-900">
-              워크인 대시보드
+              워크인
             </h1>
             <Button
               variant="outline"
@@ -59,37 +185,135 @@ export default function DashboardPage() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
-        <div className="bg-white shadow rounded-lg p-6">
-          <h2 className="text-xl font-semibold mb-4">
-            환영합니다, {user.name}님!
+        {/* Welcome Card */}
+        <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-2">
+            안녕하세요, {user.name}님!
           </h2>
+          <p className="text-gray-600">
+            {new Date().toLocaleDateString('ko-KR', {
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              weekday: 'long',
+            })}
+          </p>
+        </div>
 
-          <div className="space-y-2 text-gray-600">
+        {/* Attendance Card */}
+        <div className="bg-white shadow rounded-lg p-6">
+          <h3 className="text-lg font-semibold mb-4">오늘의 출퇴근</h3>
+
+          {loadingAttendance ? (
+            <div className="text-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+              <p className="text-gray-600 text-sm">출퇴근 기록 확인 중...</p>
+            </div>
+          ) : (
+            <>
+              {/* Success/Error Messages */}
+              {successMessage && (
+                <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-green-800">{successMessage}</p>
+                </div>
+              )}
+
+              {error && (
+                <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-800">{error}</p>
+                  <Button
+                    variant="outline"
+                    className="mt-2 text-sm"
+                    onClick={() => setError(null)}
+                  >
+                    닫기
+                  </Button>
+                </div>
+              )}
+
+              {/* Attendance Status */}
+              <div className="space-y-4">
+                {/* Check-in Status */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium">출근</p>
+                    {attendance?.checkIn ? (
+                      <p className="text-sm text-gray-600">
+                        {formatTime(attendance.checkIn.time)}
+                        {attendance.checkIn.status === 'late' && (
+                          <span className="ml-2 text-red-600">(지각)</span>
+                        )}
+                      </p>
+                    ) : (
+                      <p className="text-sm text-gray-500">미출근</p>
+                    )}
+                  </div>
+                  {!attendance?.checkIn && (
+                    <Button
+                      onClick={handleCheckIn}
+                      loading={processingCheckIn}
+                      disabled={processingCheckIn || processingCheckOut}
+                    >
+                      출근하기
+                    </Button>
+                  )}
+                </div>
+
+                {/* Check-out Status */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                  <div>
+                    <p className="font-medium">퇴근</p>
+                    {attendance?.checkOut ? (
+                      <p className="text-sm text-gray-600">
+                        {formatTime(attendance.checkOut.time)}
+                        {attendance.checkOut.status === 'early' && (
+                          <span className="ml-2 text-orange-600">(조퇴)</span>
+                        )}
+                      </p>
+                    ) : attendance?.checkIn ? (
+                      <p className="text-sm text-gray-500">미퇴근</p>
+                    ) : (
+                      <p className="text-sm text-gray-500">-</p>
+                    )}
+                  </div>
+                  {attendance?.checkIn && !attendance?.checkOut && (
+                    <Button
+                      onClick={handleCheckOut}
+                      loading={processingCheckOut}
+                      disabled={processingCheckIn || processingCheckOut}
+                    >
+                      퇴근하기
+                    </Button>
+                  )}
+                </div>
+
+                {/* Work Hours */}
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <p className="font-medium text-blue-900">근무 시간</p>
+                  {attendance?.workHours ? (
+                    <p className="text-2xl font-bold text-blue-700">
+                      {formatWorkHours(attendance.workHours)}
+                    </p>
+                  ) : attendance?.checkIn ? (
+                    <p className="text-2xl font-bold text-blue-700">
+                      {currentWorkTime || '계산 중...'}
+                      <span className="text-sm font-normal ml-2">(진행 중)</span>
+                    </p>
+                  ) : (
+                    <p className="text-gray-500">-</p>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* User Info Card */}
+        <div className="bg-white shadow rounded-lg p-6 mt-6">
+          <h3 className="text-lg font-semibold mb-4">내 정보</h3>
+          <div className="space-y-2 text-sm text-gray-600">
             <p><strong>이메일:</strong> {user.email}</p>
             <p><strong>역할:</strong> {user.role === 'admin' ? '관리자' : '직원'}</p>
-            <p><strong>UID:</strong> {user.uid}</p>
-          </div>
-
-          <div className="mt-8 p-4 bg-blue-50 rounded-lg">
-            <h3 className="font-semibold text-blue-900 mb-2">
-              🎉 인증 시스템 완성!
-            </h3>
-            <p className="text-blue-800 text-sm">
-              이메일/비밀번호 로그인 및 회원가입이 정상적으로 작동합니다.
-              Firebase Auth와 Firestore가 성공적으로 연동되었습니다.
-            </p>
-          </div>
-
-          <div className="mt-6 p-4 bg-gray-100 rounded-lg">
-            <h3 className="font-semibold text-gray-900 mb-2">
-              다음 단계 (SCRUM-7)
-            </h3>
-            <ul className="text-sm text-gray-700 space-y-1 list-disc list-inside">
-              <li>GPS 기반 출퇴근 기록 기능</li>
-              <li>출근하기/퇴근하기 버튼</li>
-              <li>실시간 근무시간 표시</li>
-              <li>지각/조퇴 자동 판정</li>
-            </ul>
           </div>
         </div>
       </main>
