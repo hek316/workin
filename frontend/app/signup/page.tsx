@@ -17,6 +17,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 export default function SignupPage() {
   const router = useRouter();
   const setUser = useAuthStore((state) => state.setUser);
+  const setSigningUp = useAuthStore((state) => state.setSigningUp);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -67,6 +68,7 @@ export default function SignupPage() {
 
     // Sign up with Firebase Auth
     setLoading(true);
+    setSigningUp(true); // Prevent onAuthStateChanged from fetching user during signup
     try {
       console.log('Firebase Auth 회원가입 시작...');
       const user = await signUp(
@@ -85,6 +87,7 @@ export default function SignupPage() {
       console.log('router.push 호출 완료');
     } catch (error) {
       console.error('회원가입 에러:', error);
+      setSigningUp(false); // Reset signing up flag on error
       const errorMessage = error instanceof Error ? error.message : '회원가입에 실패했습니다';
       setErrors({
         name: null,

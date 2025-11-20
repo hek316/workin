@@ -23,24 +23,30 @@ export async function signUp(
 ): Promise<User> {
   try {
     // Set persistence to LOCAL (survives browser restarts)
+    console.log('Setting persistence...');
     await setPersistence(auth, browserLocalPersistence);
 
     // Create Firebase Auth user
+    console.log('Creating Firebase Auth user...');
     const userCredential = await createUserWithEmailAndPassword(
       auth,
       email,
       password
     );
+    console.log('Firebase Auth user created:', userCredential.user.uid);
 
     // Create Firestore user document
+    console.log('Creating Firestore user document...');
     const user = await createUser(
       userCredential.user.uid,
       email,
       name
     );
+    console.log('Firestore user document created');
 
     return user;
   } catch (error) {
+    console.error('signUp error:', error);
     const authError = error as AuthError;
     throw new Error(getAuthErrorMessage(authError.code));
   }

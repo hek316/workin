@@ -7,20 +7,24 @@ interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  isInitialized: boolean;
+  isSigningUp: boolean; // Flag to prevent race condition during signup
   setUser: (user: User | null) => void;
+  setSigningUp: (value: boolean) => void;
   logout: () => Promise<void>;
   initialize: () => void;
 }
 
-// Global unsubscribe function to ensure only one listener exists
-let unsubscribe: (() => void) | null = null;
-
-export const useAuthStore = create<AuthState>((set) => ({
+export const useAuthStore = create<AuthState>((set, get) => ({
   user: null,
   isAuthenticated: false,
   isLoading: true, // Start with loading state
+  isInitialized: false,
+  isSigningUp: false,
 
-  setUser: (user) => set({ user, isAuthenticated: !!user, isLoading: false }),
+  setUser: (user) => set({ user, isAuthenticated: !!user, isLoading: false, isSigningUp: false }),
+
+  setSigningUp: (value) => set({ isSigningUp: value }),
 
   logout: async () => {
     try {
@@ -33,16 +37,32 @@ export const useAuthStore = create<AuthState>((set) => ({
 
   initialize: () => {
     // If already initialized, don't create another listener
-    if (unsubscribe) {
+    if (get().isInitialized) {
+      console.log('Auth already initialized, skipping...');
       return;
     }
 
+    console.log('Initializing auth listener...');
+    set({ isInitialized: true });
+
     // Listen to Firebase Auth state changes
-    unsubscribe = onAuthChange(async (firebaseUser) => {
+    onAuthChange(async (firebaseUser) => {
+      console.log('onAuthStateChanged fired:', firebaseUser?.uid || 'no user');
+
+      // If signup is in progress, skip fetching from Firestore
+      // The signup page will handle setting the user directly
+      if (get().isSigningUp) {
+        console.log('Signup in progress, skipping Firestore fetch');
+        return;
+      }
+
       if (firebaseUser) {
         // User is signed in, get full user data from Firestore
         try {
+          console.log('Fetching user from Firestore...');
           const user = await getUserByUid(firebaseUser.uid);
+          console.log('Firestore user fetched:', user?.email || 'not found');
+
           if (user) {
             set({ user, isAuthenticated: true, isLoading: false });
           } else {
@@ -55,6 +75,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         }
       } else {
         // User is signed out
+        console.log('No user, setting isLoading to false');
         set({ user: null, isAuthenticated: false, isLoading: false });
       }
     });
