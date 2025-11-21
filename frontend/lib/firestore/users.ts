@@ -4,7 +4,6 @@ import {
   setDoc,
   updateDoc,
   serverTimestamp,
-  Timestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import type { User } from '@/types';
@@ -22,23 +21,29 @@ export async function createUser(
 ): Promise<User> {
   const userRef = doc(db, 'users', uid);
 
-  const userData: User = {
+  const firestoreData = {
     uid,
     email,
     name,
-    role: 'employee', // New users are employees by default
-    createdAt: serverTimestamp() as Timestamp,
-    lastLoginAt: serverTimestamp() as Timestamp,
+    role: 'employee' as const, // New users are employees by default
+    createdAt: serverTimestamp(),
+    lastLoginAt: serverTimestamp(),
     ...(kakaoId && { kakaoId }),
     ...(profileImage && { profileImage }),
   };
 
-  await setDoc(userRef, userData);
+  await setDoc(userRef, firestoreData);
 
+  const now = new Date();
   return {
-    ...userData,
-    createdAt: new Date() as any,
-    lastLoginAt: new Date() as any,
+    uid,
+    email,
+    name,
+    role: 'employee',
+    createdAt: now,
+    lastLoginAt: now,
+    ...(kakaoId && { kakaoId }),
+    ...(profileImage && { profileImage }),
   };
 }
 

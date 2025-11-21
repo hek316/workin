@@ -246,3 +246,69 @@ export async function getAttendanceHistory(
 
   return attendance;
 }
+
+/**
+ * Get attendance records for a specific month
+ */
+export async function getMonthlyAttendance(
+  uid: string,
+  year: number,
+  month: number
+): Promise<Attendance[]> {
+  // Create start and end dates for the month
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 0); // Last day of the month
+
+  const startDateStr = startDate.toISOString().split('T')[0];
+  const endDateStr = endDate.toISOString().split('T')[0];
+
+  const attendanceRef = collection(db, 'attendance');
+  const q = query(
+    attendanceRef,
+    where('uid', '==', uid),
+    where('date', '>=', startDateStr),
+    where('date', '<=', endDateStr),
+    orderBy('date', 'asc')
+  );
+
+  const querySnapshot = await getDocs(q);
+  const attendance: Attendance[] = [];
+
+  querySnapshot.forEach((docSnap) => {
+    const data = docSnap.data();
+    attendance.push({
+      ...data,
+      checkIn: data.checkIn ? {
+        ...data.checkIn,
+        time: data.checkIn.time.toDate(),
+      } : null,
+      checkOut: data.checkOut ? {
+        ...data.checkOut,
+        time: data.checkOut.time.toDate(),
+      } : null,
+      createdAt: data.createdAt?.toDate() || new Date(),
+      updatedAt: data.updatedAt?.toDate() || new Date(),
+    } as Attendance);
+  });
+
+  return attendance;
+}
+
+/**
+ * Get available months for attendance history (current + past 3 months)
+ */
+export function getAvailableMonths(): { year: number; month: number; label: string }[] {
+  const months: { year: number; month: number; label: string }[] = [];
+  const now = new Date();
+
+  for (let i = 0; i <= 3; i++) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      year: date.getFullYear(),
+      month: date.getMonth() + 1,
+      label: `${date.getFullYear()}년 ${date.getMonth() + 1}월`,
+    });
+  }
+
+  return months;
+}

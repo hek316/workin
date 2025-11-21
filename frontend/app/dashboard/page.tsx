@@ -187,7 +187,7 @@ export default function DashboardPage() {
       <main className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">
         {/* Welcome Card */}
         <div className="bg-white shadow rounded-lg p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-2">
+          <h2 className="text-xl font-semibold mb-2 text-gray-900">
             안녕하세요, {user.name}님!
           </h2>
           <p className="text-gray-600">
@@ -202,7 +202,7 @@ export default function DashboardPage() {
 
         {/* Attendance Card */}
         <div className="bg-white shadow rounded-lg p-6">
-          <h3 className="text-lg font-semibold mb-4">오늘의 출퇴근</h3>
+          <h3 className="text-lg font-semibold mb-4 text-gray-900">오늘의 출퇴근</h3>
 
           {loadingAttendance ? (
             <div className="text-center py-8">
@@ -236,7 +236,7 @@ export default function DashboardPage() {
                 {/* Check-in Status */}
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
-                    <p className="font-medium">출근</p>
+                    <p className="font-medium text-gray-900">출근</p>
                     {attendance?.checkIn ? (
                       <p className="text-sm text-gray-600">
                         {formatTime(attendance.checkIn.time)}
@@ -262,7 +262,7 @@ export default function DashboardPage() {
                 {/* Check-out Status */}
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
                   <div>
-                    <p className="font-medium">퇴근</p>
+                    <p className="font-medium text-gray-900">퇴근</p>
                     {attendance?.checkOut ? (
                       <p className="text-sm text-gray-600">
                         {formatTime(attendance.checkOut.time)}
@@ -308,9 +308,26 @@ export default function DashboardPage() {
           )}
         </div>
 
+        {/* Quick Actions */}
+        <div className="bg-white shadow rounded-lg p-6 mt-6">
+          <h3 className="text-lg font-semibold mb-4 text-gray-900">빠른 메뉴</h3>
+          <div className="space-y-3">
+            <Button
+              variant="outline"
+              onClick={() => router.push('/history')}
+              className="w-full justify-start"
+            >
+              <svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              내 기록 보기
+            </Button>
+          </div>
+        </div>
+
         {/* User Info Card */}
         <div className="bg-white shadow rounded-lg p-6 mt-6">
-          <h3 className="text-lg font-semibold mb-4">내 정보</h3>
+          <h3 className="text-lg font-semibold mb-4 text-gray-900">내 정보</h3>
           <div className="space-y-2 text-sm text-gray-600">
             <p><strong>이메일:</strong> {user.email}</p>
             <p><strong>역할:</strong> {user.role === 'admin' ? '관리자' : '직원'}</p>
