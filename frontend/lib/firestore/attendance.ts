@@ -263,12 +263,13 @@ export async function getMonthlyAttendance(
   const endDateStr = endDate.toISOString().split('T')[0];
 
   const attendanceRef = collection(db, 'attendance');
+  // Query without orderBy to avoid needing composite index
+  // Sort in JavaScript instead
   const q = query(
     attendanceRef,
     where('uid', '==', uid),
     where('date', '>=', startDateStr),
-    where('date', '<=', endDateStr),
-    orderBy('date', 'asc')
+    where('date', '<=', endDateStr)
   );
 
   const querySnapshot = await getDocs(q);
@@ -290,6 +291,9 @@ export async function getMonthlyAttendance(
       updatedAt: data.updatedAt?.toDate() || new Date(),
     } as Attendance);
   });
+
+  // Sort by date in ascending order
+  attendance.sort((a, b) => a.date.localeCompare(b.date));
 
   return attendance;
 }
