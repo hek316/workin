@@ -31,9 +31,9 @@ export function ApprovalRequestModal({
     e.preventDefault();
     setError(null);
 
-    // Validation: minimum 10 characters
-    if (reason.trim().length < 10) {
-      setError('사유는 최소 10자 이상 입력해주세요');
+    // Validation: minimum 5 characters
+    if (reason.trim().length < 5) {
+      setError('사유는 최소 5자 이상 입력해주세요');
       return;
     }
 
@@ -96,7 +96,7 @@ export function ApprovalRequestModal({
                 disabled={isSubmitting}
               />
               <p className="mt-1 text-xs text-gray-500">
-                {reason.length}/10자 이상
+                {reason.length}/5자 이상
               </p>
             </div>
 
@@ -119,7 +119,7 @@ export function ApprovalRequestModal({
               <Button
                 type="submit"
                 loading={isSubmitting}
-                disabled={isSubmitting || reason.trim().length < 10}
+                disabled={isSubmitting || reason.trim().length < 5}
                 className="flex-1"
               >
                 요청하기

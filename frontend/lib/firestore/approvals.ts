@@ -92,10 +92,10 @@ export async function getTodayApprovalRequest(
  */
 export async function getUserApprovalRequests(uid: string): Promise<ApprovalRequest[]> {
   const approvalsRef = collection(db, 'approvals');
+  // Removed orderBy to avoid composite index requirement
   const q = query(
     approvalsRef,
-    where('uid', '==', uid),
-    orderBy('createdAt', 'desc')
+    where('uid', '==', uid)
   );
 
   const querySnapshot = await getDocs(q);
@@ -111,6 +111,9 @@ export async function getUserApprovalRequests(uid: string): Promise<ApprovalRequ
       updatedAt: data.updatedAt?.toDate() || new Date(),
     } as ApprovalRequest);
   });
+
+  // Sort by createdAt descending on client side
+  approvals.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   return approvals;
 }
@@ -120,10 +123,10 @@ export async function getUserApprovalRequests(uid: string): Promise<ApprovalRequ
  */
 export async function getPendingApprovals(): Promise<ApprovalRequest[]> {
   const approvalsRef = collection(db, 'approvals');
+  // Removed orderBy to avoid composite index requirement
   const q = query(
     approvalsRef,
-    where('status', '==', 'pending'),
-    orderBy('createdAt', 'desc')
+    where('status', '==', 'pending')
   );
 
   const querySnapshot = await getDocs(q);
@@ -139,6 +142,9 @@ export async function getPendingApprovals(): Promise<ApprovalRequest[]> {
       updatedAt: data.updatedAt?.toDate() || new Date(),
     } as ApprovalRequest);
   });
+
+  // Sort by createdAt descending on client side
+  approvals.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
   return approvals;
 }
@@ -210,10 +216,10 @@ export function subscribeToPendingApprovals(
   callback: (approvals: ApprovalRequest[]) => void
 ): Unsubscribe {
   const approvalsRef = collection(db, 'approvals');
+  // Removed orderBy to avoid composite index requirement
   const q = query(
     approvalsRef,
-    where('status', '==', 'pending'),
-    orderBy('createdAt', 'desc')
+    where('status', '==', 'pending')
   );
 
   return onSnapshot(q, (querySnapshot) => {
@@ -229,6 +235,9 @@ export function subscribeToPendingApprovals(
         updatedAt: data.updatedAt?.toDate() || new Date(),
       } as ApprovalRequest);
     });
+
+    // Sort by createdAt descending on client side
+    approvals.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
     callback(approvals);
   });
