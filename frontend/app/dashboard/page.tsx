@@ -309,6 +309,10 @@ export default function DashboardPage() {
                     <p className="text-2xl font-bold text-blue-700">
                       {formatWorkHours(attendance.workHours)}
                     </p>
+                  ) : attendance?.checkOut ? (
+                    <p className="text-2xl font-bold text-blue-700">
+                      0.0시간
+                    </p>
                   ) : attendance?.checkIn ? (
                     <p className="text-2xl font-bold text-blue-700">
                       {currentWorkTime || '계산 중...'}

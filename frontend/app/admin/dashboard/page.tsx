@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import {
-  getAllEmployees,
+  getAllUsers,
   subscribeToAttendanceByDate,
   calculateAttendanceStats,
   combineEmployeesWithAttendance,
@@ -24,19 +24,19 @@ export default function AdminDashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Fetch employees on mount
+  // Fetch all users on mount
   useEffect(() => {
-    const fetchEmployees = async () => {
+    const fetchUsers = async () => {
       try {
-        const employeeList = await getAllEmployees();
-        setEmployees(employeeList);
+        const userList = await getAllUsers();
+        setEmployees(userList);
       } catch (err) {
-        console.error('Error fetching employees:', err);
-        setError('직원 목록을 불러오는데 실패했습니다.');
+        console.error('Error fetching users:', err);
+        setError('사용자 목록을 불러오는데 실패했습니다.');
       }
     };
 
-    fetchEmployees();
+    fetchUsers();
   }, []);
 
   // Subscribe to attendance for selected date
@@ -155,7 +155,7 @@ export default function AdminDashboardPage() {
             id="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-gray-900 bg-white"
           />
         </div>
       </div>
