@@ -16,10 +16,20 @@ import { db } from '../firebase/config';
 import type { Attendance, CheckInOut, Location } from '@/types';
 
 /**
+ * Format date to YYYY-MM-DD string using local timezone
+ */
+export function formatDateToString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Generate attendance document ID: {uid}_{YYYY-MM-DD}
  */
 export function getAttendanceDocId(uid: string, date: Date): string {
-  const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+  const dateStr = formatDateToString(date); // YYYY-MM-DD in local timezone
   return `${uid}_${dateStr}`;
 }
 
@@ -27,7 +37,7 @@ export function getAttendanceDocId(uid: string, date: Date): string {
  * Get today's date string in YYYY-MM-DD format
  */
 export function getTodayDateString(): string {
-  return new Date().toISOString().split('T')[0];
+  return formatDateToString(new Date());
 }
 
 /**
@@ -213,7 +223,7 @@ export async function getAttendanceHistory(
   startDate.setMonth(startDate.getMonth() - monthsBack);
   startDate.setDate(1); // First day of the month
 
-  const startDateStr = startDate.toISOString().split('T')[0];
+  const startDateStr = formatDateToString(startDate);
 
   const attendanceRef = collection(db, 'attendance');
   const q = query(
@@ -249,48 +259,49 @@ export async function getAttendanceHistory(
 
 /**
  * Get attendance records for a specific month
+ * Uses document ID lookup to avoid needing Firestore composite index
  */
 export async function getMonthlyAttendance(
   uid: string,
   year: number,
   month: number
 ): Promise<Attendance[]> {
-  // Create start and end dates for the month
-  const startDate = new Date(year, month - 1, 1);
-  const endDate = new Date(year, month, 0); // Last day of the month
-
-  const startDateStr = startDate.toISOString().split('T')[0];
-  const endDateStr = endDate.toISOString().split('T')[0];
-
-  const attendanceRef = collection(db, 'attendance');
-  // Query without orderBy to avoid needing composite index
-  // Sort in JavaScript instead
-  const q = query(
-    attendanceRef,
-    where('uid', '==', uid),
-    where('date', '>=', startDateStr),
-    where('date', '<=', endDateStr)
-  );
-
-  const querySnapshot = await getDocs(q);
   const attendance: Attendance[] = [];
 
-  querySnapshot.forEach((docSnap) => {
-    const data = docSnap.data();
-    attendance.push({
-      ...data,
-      checkIn: data.checkIn ? {
-        ...data.checkIn,
-        time: data.checkIn.time.toDate(),
-      } : null,
-      checkOut: data.checkOut ? {
-        ...data.checkOut,
-        time: data.checkOut.time.toDate(),
-      } : null,
-      createdAt: data.createdAt?.toDate() || new Date(),
-      updatedAt: data.updatedAt?.toDate() || new Date(),
-    } as Attendance);
-  });
+  // Get number of days in the month
+  const daysInMonth = new Date(year, month, 0).getDate();
+
+  // Fetch each day's attendance by document ID
+  const promises: Promise<void>[] = [];
+
+  for (let day = 1; day <= daysInMonth; day++) {
+    const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    const docId = `${uid}_${dateStr}`;
+    const docRef = doc(db, 'attendance', docId);
+
+    const promise = getDoc(docRef).then((docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        attendance.push({
+          ...data,
+          checkIn: data.checkIn ? {
+            ...data.checkIn,
+            time: data.checkIn.time.toDate(),
+          } : null,
+          checkOut: data.checkOut ? {
+            ...data.checkOut,
+            time: data.checkOut.time.toDate(),
+          } : null,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Attendance);
+      }
+    });
+
+    promises.push(promise);
+  }
+
+  await Promise.all(promises);
 
   // Sort by date in ascending order
   attendance.sort((a, b) => a.date.localeCompare(b.date));

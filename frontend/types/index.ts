@@ -35,3 +35,35 @@ export interface Attendance {
   createdAt: Date;
   updatedAt: Date;
 }
+
+export interface OfficeLocation {
+  id: string;
+  name: string;
+  address?: string;
+  lat: number;
+  lng: number;
+  checkInRadius: number;
+  checkOutRadius: number;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type ApprovalType = 'check_in' | 'check_out';
+export type ApprovalStatus = 'pending' | 'approved' | 'rejected';
+
+export interface ApprovalRequest {
+  id: string;
+  uid: string;
+  name: string;
+  date: string;
+  type: ApprovalType;
+  reason: string;
+  location: Location;
+  status: ApprovalStatus;
+  reviewedBy?: string;
+  reviewedAt?: Date;
+  rejectionReason?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}

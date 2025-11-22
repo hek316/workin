@@ -4,19 +4,26 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/Button';
+import { ApprovalRequestModal } from '@/components/ApprovalRequestModal';
 import {
   getTodayAttendance,
   recordCheckIn,
   recordCheckOut
 } from '@/lib/firestore/attendance';
 import {
+  createApprovalRequest,
+  getTodayApprovalRequest,
+  subscribeToApprovalStatus,
+} from '@/lib/firestore/approvals';
+import {
   validateGPSForCheckIn,
   validateGPSForCheckOut,
   formatWorkHours,
   formatTime,
-  GPSError
+  GPSError,
+  GPSValidationResult
 } from '@/lib/gps';
-import type { Attendance } from '@/types';
+import type { Attendance, ApprovalRequest, ApprovalType, Location } from '@/types';
 
 export default function DashboardPage() {
   const router = useRouter();
@@ -30,6 +37,14 @@ export default function DashboardPage() {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [currentWorkTime, setCurrentWorkTime] = useState<string>('');
 
+  // Approval request states
+  const [showApprovalModal, setShowApprovalModal] = useState(false);
+  const [approvalType, setApprovalType] = useState<ApprovalType>('check_in');
+  const [pendingLocation, setPendingLocation] = useState<Location | null>(null);
+  const [pendingDistance, setPendingDistance] = useState<number | null>(null);
+  const [checkInApproval, setCheckInApproval] = useState<ApprovalRequest | null>(null);
+  const [checkOutApproval, setCheckOutApproval] = useState<ApprovalRequest | null>(null);
+
   // Fetch today's attendance
   const fetchAttendance = useCallback(async () => {
     if (!user) return;
@@ -37,6 +52,14 @@ export default function DashboardPage() {
     try {
       const todayAttendance = await getTodayAttendance(user.uid);
       setAttendance(todayAttendance);
+
+      // Also fetch today's approval requests
+      const [checkInReq, checkOutReq] = await Promise.all([
+        getTodayApprovalRequest(user.uid, 'check_in'),
+        getTodayApprovalRequest(user.uid, 'check_out'),
+      ]);
+      setCheckInApproval(checkInReq);
+      setCheckOutApproval(checkOutReq);
     } catch (err) {
       console.error('Error fetching attendance:', err);
       setError('출퇴근 기록을 불러오는데 실패했습니다');
@@ -57,6 +80,51 @@ export default function DashboardPage() {
       fetchAttendance();
     }
   }, [user, fetchAttendance]);
+
+  // Subscribe to approval status changes
+  useEffect(() => {
+    if (!user) return;
+
+    const unsubscribers: (() => void)[] = [];
+
+    // Subscribe to check-in approval
+    if (checkInApproval && checkInApproval.status === 'pending') {
+      const unsubscribe = subscribeToApprovalStatus(
+        checkInApproval.id,
+        (approval) => {
+          setCheckInApproval(approval);
+          if (approval?.status === 'approved') {
+            setSuccessMessage('출근 예외 승인이 완료되었습니다');
+            fetchAttendance();
+          } else if (approval?.status === 'rejected') {
+            setError(`출근 예외 요청이 거부되었습니다: ${approval.rejectionReason || '사유 없음'}`);
+          }
+        }
+      );
+      unsubscribers.push(unsubscribe);
+    }
+
+    // Subscribe to check-out approval
+    if (checkOutApproval && checkOutApproval.status === 'pending') {
+      const unsubscribe = subscribeToApprovalStatus(
+        checkOutApproval.id,
+        (approval) => {
+          setCheckOutApproval(approval);
+          if (approval?.status === 'approved') {
+            setSuccessMessage('퇴근 예외 승인이 완료되었습니다');
+            fetchAttendance();
+          } else if (approval?.status === 'rejected') {
+            setError(`퇴근 예외 요청이 거부되었습니다: ${approval.rejectionReason || '사유 없음'}`);
+          }
+        }
+      );
+      unsubscribers.push(unsubscribe);
+    }
+
+    return () => {
+      unsubscribers.forEach((unsub) => unsub());
+    };
+  }, [user, checkInApproval, checkOutApproval, fetchAttendance]);
 
   // Update current work time every minute
   useEffect(() => {
@@ -80,6 +148,21 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [attendance]);
 
+  const handleGPSValidationError = (
+    validation: GPSValidationResult,
+    type: ApprovalType
+  ) => {
+    if (validation.error?.type === 'OUT_OF_RANGE' && validation.location) {
+      // Show option to request approval
+      setApprovalType(type);
+      setPendingLocation(validation.location);
+      setPendingDistance(validation.distance);
+      setError(validation.error.message);
+    } else {
+      setError(validation.error?.message || 'GPS 검증에 실패했습니다');
+    }
+  };
+
   const handleCheckIn = async () => {
     if (!user) return;
 
@@ -91,7 +174,7 @@ export default function DashboardPage() {
       const validation = await validateGPSForCheckIn();
 
       if (!validation.isValid || !validation.location) {
-        setError(validation.error?.message || 'GPS 검증에 실패했습니다');
+        handleGPSValidationError(validation, 'check_in');
         return;
       }
 
@@ -124,7 +207,7 @@ export default function DashboardPage() {
       const validation = await validateGPSForCheckOut();
 
       if (!validation.isValid || !validation.location) {
-        setError(validation.error?.message || 'GPS 검증에 실패했습니다');
+        handleGPSValidationError(validation, 'check_out');
         return;
       }
 
@@ -145,6 +228,29 @@ export default function DashboardPage() {
     } finally {
       setProcessingCheckOut(false);
     }
+  };
+
+  const handleApprovalRequest = async (reason: string) => {
+    if (!user || !pendingLocation) return;
+
+    const approval = await createApprovalRequest(
+      user.uid,
+      user.name,
+      approvalType,
+      reason,
+      pendingLocation
+    );
+
+    if (approvalType === 'check_in') {
+      setCheckInApproval(approval);
+    } else {
+      setCheckOutApproval(approval);
+    }
+
+    setError(null);
+    setSuccessMessage('예외 승인 요청이 제출되었습니다. 관리자 승인을 기다려주세요.');
+    setPendingLocation(null);
+    setPendingDistance(null);
   };
 
   const handleLogout = async () => {
@@ -168,6 +274,9 @@ export default function DashboardPage() {
   if (!isAuthenticated || !user) {
     return null;
   }
+
+  const hasPendingCheckInApproval = checkInApproval?.status === 'pending';
+  const hasPendingCheckOutApproval = checkOutApproval?.status === 'pending';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -236,13 +345,45 @@ export default function DashboardPage() {
               {error && (
                 <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
                   <p className="text-red-800">{error}</p>
-                  <Button
-                    variant="outline"
-                    className="mt-2 text-sm"
-                    onClick={() => setError(null)}
-                  >
-                    닫기
-                  </Button>
+                  <div className="mt-2 flex gap-2">
+                    {pendingLocation && (
+                      <Button
+                        variant="primary"
+                        className="text-sm"
+                        onClick={() => setShowApprovalModal(true)}
+                      >
+                        예외 승인 요청
+                      </Button>
+                    )}
+                    <Button
+                      variant="outline"
+                      className="text-sm"
+                      onClick={() => {
+                        setError(null);
+                        setPendingLocation(null);
+                        setPendingDistance(null);
+                      }}
+                    >
+                      닫기
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {/* Pending Approval Status */}
+              {hasPendingCheckInApproval && !attendance?.checkIn && (
+                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-yellow-800">
+                    출근 예외 승인 대기 중입니다. 관리자가 검토 후 승인/거부합니다.
+                  </p>
+                </div>
+              )}
+
+              {hasPendingCheckOutApproval && attendance?.checkIn && !attendance?.checkOut && (
+                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-yellow-800">
+                    퇴근 예외 승인 대기 중입니다. 관리자가 검토 후 승인/거부합니다.
+                  </p>
                 </div>
               )}
 
@@ -258,12 +399,17 @@ export default function DashboardPage() {
                         {attendance.checkIn.status === 'late' && (
                           <span className="ml-2 text-red-600">(지각)</span>
                         )}
+                        {attendance.checkIn.status === 'approved' && (
+                          <span className="ml-2 text-blue-600">(예외 승인)</span>
+                        )}
                       </p>
+                    ) : hasPendingCheckInApproval ? (
+                      <p className="text-sm text-yellow-600">승인 대기 중</p>
                     ) : (
                       <p className="text-sm text-gray-500">미출근</p>
                     )}
                   </div>
-                  {!attendance?.checkIn && (
+                  {!attendance?.checkIn && !hasPendingCheckInApproval && (
                     <Button
                       onClick={handleCheckIn}
                       loading={processingCheckIn}
@@ -284,14 +430,21 @@ export default function DashboardPage() {
                         {attendance.checkOut.status === 'early' && (
                           <span className="ml-2 text-orange-600">(조퇴)</span>
                         )}
+                        {attendance.checkOut.status === 'approved' && (
+                          <span className="ml-2 text-blue-600">(예외 승인)</span>
+                        )}
                       </p>
                     ) : attendance?.checkIn ? (
-                      <p className="text-sm text-gray-500">미퇴근</p>
+                      hasPendingCheckOutApproval ? (
+                        <p className="text-sm text-yellow-600">승인 대기 중</p>
+                      ) : (
+                        <p className="text-sm text-gray-500">미퇴근</p>
+                      )
                     ) : (
                       <p className="text-sm text-gray-500">-</p>
                     )}
                   </div>
-                  {attendance?.checkIn && !attendance?.checkOut && (
+                  {attendance?.checkIn && !attendance?.checkOut && !hasPendingCheckOutApproval && (
                     <Button
                       onClick={handleCheckOut}
                       loading={processingCheckOut}
@@ -353,6 +506,16 @@ export default function DashboardPage() {
           </div>
         </div>
       </main>
+
+      {/* Approval Request Modal */}
+      <ApprovalRequestModal
+        isOpen={showApprovalModal}
+        onClose={() => setShowApprovalModal(false)}
+        onSubmit={handleApprovalRequest}
+        type={approvalType}
+        location={pendingLocation}
+        distance={pendingDistance}
+      />
     </div>
   );
 }
