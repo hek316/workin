@@ -64,7 +64,12 @@ export default function DashboardPage() {
 
     const updateWorkTime = () => {
       const now = new Date();
-      const diffMs = now.getTime() - attendance.checkIn!.time.getTime();
+      const checkInTime = attendance.checkIn!.time;
+      // Handle both Date object and Firestore Timestamp
+      const checkInMs = checkInTime instanceof Date
+        ? checkInTime.getTime()
+        : (checkInTime as { toDate: () => Date }).toDate().getTime();
+      const diffMs = now.getTime() - checkInMs;
       const diffHours = diffMs / (1000 * 60 * 60);
       setCurrentWorkTime(formatWorkHours(diffHours));
     };
@@ -173,12 +178,22 @@ export default function DashboardPage() {
             <h1 className="text-2xl font-bold text-gray-900">
               워크인
             </h1>
-            <Button
-              variant="outline"
-              onClick={handleLogout}
-            >
-              로그아웃
-            </Button>
+            <div className="flex items-center gap-3">
+              {user.role === 'admin' && (
+                <Button
+                  variant="primary"
+                  onClick={() => router.push('/admin/dashboard')}
+                >
+                  관리자
+                </Button>
+              )}
+              <Button
+                variant="outline"
+                onClick={handleLogout}
+              >
+                로그아웃
+              </Button>
+            </div>
           </div>
         </div>
       </header>
