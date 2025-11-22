@@ -61,6 +61,12 @@ export default function AdminLayout({
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-600">{user?.name}</span>
               <button
+                onClick={() => router.push('/admin/settings')}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                설정
+              </button>
+              <button
                 onClick={() => router.push('/dashboard')}
                 className="text-sm text-gray-500 hover:text-gray-700"
               >

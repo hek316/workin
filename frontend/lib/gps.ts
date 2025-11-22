@@ -1,15 +1,9 @@
-import type { Location } from '@/types';
+import type { Location, OfficeLocation } from '@/types';
+import { getActiveOffices } from './firestore/offices';
 
 /**
- * Company office location (from environment variables or defaults)
- */
-export const OFFICE_LOCATION = {
-  lat: parseFloat(process.env.NEXT_PUBLIC_OFFICE_LAT || '37.5665'),
-  lng: parseFloat(process.env.NEXT_PUBLIC_OFFICE_LNG || '126.9780'),
-};
-
-/**
- * GPS configuration constants
+ * Default GPS configuration constants
+ * These are used as fallbacks if office-specific values aren't set
  */
 export const GPS_CONFIG = {
   CHECK_IN_RADIUS: 1000, // 1km for check-in
@@ -18,6 +12,44 @@ export const GPS_CONFIG = {
   TIMEOUT: 10000, // GPS timeout in milliseconds
   MAXIMUM_AGE: 60000, // Maximum age of cached position in milliseconds
 };
+
+/**
+ * Cached offices to avoid repeated Firestore calls
+ */
+let cachedOffices: OfficeLocation[] | null = null;
+let cacheTimestamp: number = 0;
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Get offices with caching
+ */
+async function getOfficesWithCache(): Promise<OfficeLocation[]> {
+  const now = Date.now();
+
+  if (cachedOffices && (now - cacheTimestamp) < CACHE_DURATION) {
+    return cachedOffices;
+  }
+
+  try {
+    cachedOffices = await getActiveOffices();
+    cacheTimestamp = now;
+    return cachedOffices;
+  } catch (error) {
+    // If fetch fails and we have cached data, use it
+    if (cachedOffices) {
+      return cachedOffices;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Clear the offices cache (call when offices are updated)
+ */
+export function clearOfficesCache(): void {
+  cachedOffices = null;
+  cacheTimestamp = 0;
+}
 
 /**
  * Calculate distance between two coordinates using Haversine formula
@@ -58,6 +90,7 @@ export type GPSErrorType =
   | 'TIMEOUT'
   | 'LOW_ACCURACY'
   | 'OUT_OF_RANGE'
+  | 'NO_OFFICES'
   | 'UNKNOWN';
 
 /**
@@ -128,11 +161,53 @@ export interface GPSValidationResult {
   isValid: boolean;
   location: Location | null;
   distance: number | null;
+  nearestOffice?: OfficeLocation;
   error: GPSError | null;
+}
+
+/**
+ * Find the nearest office from a given location
+ */
+function findNearestOffice(
+  lat: number,
+  lng: number,
+  offices: OfficeLocation[]
+): { office: OfficeLocation; distance: number } | null {
+  if (offices.length === 0) {
+    return null;
+  }
+
+  let nearestOffice = offices[0];
+  let minDistance = calculateDistance(lat, lng, offices[0].lat, offices[0].lng);
+
+  for (let i = 1; i < offices.length; i++) {
+    const distance = calculateDistance(lat, lng, offices[i].lat, offices[i].lng);
+    if (distance < minDistance) {
+      minDistance = distance;
+      nearestOffice = offices[i];
+    }
+  }
+
+  return { office: nearestOffice, distance: minDistance };
 }
 
 export async function validateGPSForCheckIn(): Promise<GPSValidationResult> {
   try {
+    // Get offices first
+    const offices = await getOfficesWithCache();
+
+    if (offices.length === 0) {
+      return {
+        isValid: false,
+        location: null,
+        distance: null,
+        error: {
+          type: 'NO_OFFICES',
+          message: '등록된 사무실이 없습니다. 관리자에게 문의하세요.',
+        },
+      };
+    }
+
     const position = await getCurrentPosition();
     const { latitude, longitude, accuracy } = position.coords;
 
@@ -149,23 +224,32 @@ export async function validateGPSForCheckIn(): Promise<GPSValidationResult> {
       };
     }
 
-    // Calculate distance from office
-    const distance = calculateDistance(
-      latitude,
-      longitude,
-      OFFICE_LOCATION.lat,
-      OFFICE_LOCATION.lng
-    );
+    // Find nearest office
+    const nearest = findNearestOffice(latitude, longitude, offices);
+    if (!nearest) {
+      return {
+        isValid: false,
+        location: { lat: latitude, lng: longitude, accuracy },
+        distance: null,
+        error: {
+          type: 'NO_OFFICES',
+          message: '등록된 사무실이 없습니다.',
+        },
+      };
+    }
+
+    const { office, distance } = nearest;
 
     // Check if within check-in radius
-    if (distance > GPS_CONFIG.CHECK_IN_RADIUS) {
+    if (distance > office.checkInRadius) {
       return {
         isValid: false,
         location: { lat: latitude, lng: longitude, accuracy },
         distance,
+        nearestOffice: office,
         error: {
           type: 'OUT_OF_RANGE',
-          message: `회사로부터 ${Math.round(distance)}m 거리에 있습니다. 출근은 ${GPS_CONFIG.CHECK_IN_RADIUS}m 이내에서만 가능합니다.`,
+          message: `${office.name}로부터 ${Math.round(distance)}m 거리에 있습니다. 출근은 ${office.checkInRadius}m 이내에서만 가능합니다.`,
         },
       };
     }
@@ -174,6 +258,7 @@ export async function validateGPSForCheckIn(): Promise<GPSValidationResult> {
       isValid: true,
       location: { lat: latitude, lng: longitude, accuracy },
       distance,
+      nearestOffice: office,
       error: null,
     };
   } catch (error) {
@@ -188,6 +273,21 @@ export async function validateGPSForCheckIn(): Promise<GPSValidationResult> {
 
 export async function validateGPSForCheckOut(): Promise<GPSValidationResult> {
   try {
+    // Get offices first
+    const offices = await getOfficesWithCache();
+
+    if (offices.length === 0) {
+      return {
+        isValid: false,
+        location: null,
+        distance: null,
+        error: {
+          type: 'NO_OFFICES',
+          message: '등록된 사무실이 없습니다. 관리자에게 문의하세요.',
+        },
+      };
+    }
+
     const position = await getCurrentPosition();
     const { latitude, longitude, accuracy } = position.coords;
 
@@ -204,23 +304,32 @@ export async function validateGPSForCheckOut(): Promise<GPSValidationResult> {
       };
     }
 
-    // Calculate distance from office
-    const distance = calculateDistance(
-      latitude,
-      longitude,
-      OFFICE_LOCATION.lat,
-      OFFICE_LOCATION.lng
-    );
+    // Find nearest office
+    const nearest = findNearestOffice(latitude, longitude, offices);
+    if (!nearest) {
+      return {
+        isValid: false,
+        location: { lat: latitude, lng: longitude, accuracy },
+        distance: null,
+        error: {
+          type: 'NO_OFFICES',
+          message: '등록된 사무실이 없습니다.',
+        },
+      };
+    }
+
+    const { office, distance } = nearest;
 
     // Check if within check-out radius (more lenient than check-in)
-    if (distance > GPS_CONFIG.CHECK_OUT_RADIUS) {
+    if (distance > office.checkOutRadius) {
       return {
         isValid: false,
         location: { lat: latitude, lng: longitude, accuracy },
         distance,
+        nearestOffice: office,
         error: {
           type: 'OUT_OF_RANGE',
-          message: `회사로부터 ${Math.round(distance)}m 거리에 있습니다. 퇴근은 ${GPS_CONFIG.CHECK_OUT_RADIUS}m 이내에서만 가능합니다.`,
+          message: `${office.name}로부터 ${Math.round(distance)}m 거리에 있습니다. 퇴근은 ${office.checkOutRadius}m 이내에서만 가능합니다.`,
         },
       };
     }
@@ -229,6 +338,7 @@ export async function validateGPSForCheckOut(): Promise<GPSValidationResult> {
       isValid: true,
       location: { lat: latitude, lng: longitude, accuracy },
       distance,
+      nearestOffice: office,
       error: null,
     };
   } catch (error) {
