@@ -114,7 +114,7 @@ export default function SignupPage() {
         </div>
 
         <div className="bg-white py-8 px-6 shadow rounded-lg">
-          <h2 className="text-2xl font-semibold text-center mb-6">
+          <h2 className="text-2xl font-semibold text-center mb-6 text-gray-900">
             회원가입
           </h2>
 
@@ -142,7 +142,7 @@ export default function SignupPage() {
             <Input
               label="비밀번호"
               type="password"
-              placeholder="최소 6자 이상"
+              placeholder="8자 이상, 영문+숫자 포함"
               value={formData.password}
               onChange={handleChange('password')}
               error={errors.password}

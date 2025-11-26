@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/useAuthStore';
 import { Button } from '@/components/ui/Button';
 import { ApprovalRequestModal } from '@/components/ApprovalRequestModal';
+import WeakPasswordWarning from '@/components/WeakPasswordWarning';
 import {
   getTodayAttendance,
   recordCheckIn,
@@ -323,6 +324,9 @@ export default function DashboardPage() {
             })}
           </p>
         </div>
+
+        {/* Weak Password Warning */}
+        <WeakPasswordWarning />
 
         {/* Attendance Card */}
         <div className="bg-white shadow rounded-lg p-6">

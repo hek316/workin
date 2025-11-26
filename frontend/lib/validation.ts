@@ -8,11 +8,53 @@ export const validateEmail = (email: string): boolean => {
 };
 
 /**
+ * Common weak passwords to block
+ */
+const WEAK_PASSWORDS = [
+  '111111', '123456', '123456789', '12345678', '1234567890',
+  'password', 'password123', 'qwerty', 'abc123', '000000',
+  '654321', '123123', '888888', '666666', '555555',
+  'admin', 'admin123', 'root', 'test', 'guest',
+  '1q2w3e4r', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm',
+];
+
+/**
  * Password validation
- * Password must be at least 6 characters long
+ * Password must be:
+ * - At least 8 characters long
+ * - Contain at least one letter (a-z, A-Z)
+ * - Contain at least one number (0-9)
+ * - Not be a common weak password
  */
 export const validatePassword = (password: string): boolean => {
-  return password.length >= 6;
+  // Minimum length check
+  if (password.length < 8) {
+    return false;
+  }
+
+  // Must contain at least one letter
+  if (!/[a-zA-Z]/.test(password)) {
+    return false;
+  }
+
+  // Must contain at least one number
+  if (!/[0-9]/.test(password)) {
+    return false;
+  }
+
+  // Block common weak passwords
+  if (WEAK_PASSWORDS.includes(password.toLowerCase())) {
+    return false;
+  }
+
+  return true;
+};
+
+/**
+ * Check if password is weak (for existing users warning)
+ */
+export const isWeakPassword = (password: string): boolean => {
+  return !validatePassword(password);
 };
 
 /**
@@ -41,11 +83,27 @@ export const getEmailError = (email: string): string | null => {
 };
 
 /**
- * Get password error message
+ * Get detailed password error message
  */
 export const getPasswordError = (password: string): string | null => {
   if (!password) return '비밀번호를 입력해주세요';
-  if (!validatePassword(password)) return '비밀번호는 최소 6자 이상이어야 합니다';
+
+  if (password.length < 8) {
+    return '비밀번호는 최소 8자 이상이어야 합니다';
+  }
+
+  if (!/[a-zA-Z]/.test(password)) {
+    return '비밀번호에 영문자를 포함해야 합니다';
+  }
+
+  if (!/[0-9]/.test(password)) {
+    return '비밀번호에 숫자를 포함해야 합니다';
+  }
+
+  if (WEAK_PASSWORDS.includes(password.toLowerCase())) {
+    return '너무 흔한 비밀번호입니다. 다른 비밀번호를 사용해주세요';
+  }
+
   return null;
 };
 

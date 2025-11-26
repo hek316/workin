@@ -7,6 +7,9 @@ import {
   setPersistence,
   browserLocalPersistence,
   AuthError,
+  EmailAuthProvider,
+  reauthenticateWithCredential,
+  updatePassword as firebaseUpdatePassword,
 } from 'firebase/auth';
 import { auth } from './config';
 import { createUser, getUserByUid, updateLastLogin } from '../firestore/users';
@@ -114,6 +117,51 @@ export function onAuthChange(
  */
 export function getCurrentUser(): FirebaseUser | null {
   return auth.currentUser;
+}
+
+/**
+ * Re-authenticate user with email and password
+ * Required before sensitive operations like password change
+ */
+export async function reauthenticate(
+  email: string,
+  currentPassword: string
+): Promise<void> {
+  try {
+    const user = auth.currentUser;
+
+    if (!user) {
+      throw new Error('로그인이 필요합니다');
+    }
+
+    // Create credential with email and current password
+    const credential = EmailAuthProvider.credential(email, currentPassword);
+
+    // Re-authenticate
+    await reauthenticateWithCredential(user, credential);
+  } catch (error) {
+    const authError = error as AuthError;
+    throw new Error(getAuthErrorMessage(authError.code));
+  }
+}
+
+/**
+ * Update user password
+ * User must be re-authenticated before calling this
+ */
+export async function updatePassword(newPassword: string): Promise<void> {
+  try {
+    const user = auth.currentUser;
+
+    if (!user) {
+      throw new Error('로그인이 필요합니다');
+    }
+
+    await firebaseUpdatePassword(user, newPassword);
+  } catch (error) {
+    const authError = error as AuthError;
+    throw new Error(getAuthErrorMessage(authError.code));
+  }
 }
 
 /**
