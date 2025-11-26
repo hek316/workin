@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
-import { getEmailError, getPasswordError } from '@/lib/validation';
+import { getEmailError } from '@/lib/validation';
 import { signIn } from '@/lib/firebase/auth';
 import { useAuthStore } from '@/store/useAuthStore';
 
@@ -29,7 +29,8 @@ export default function LoginPage() {
 
     // Validate inputs
     const emailError = getEmailError(email);
-    const passwordError = getPasswordError(password);
+    // For login, only check if password is empty (allow existing 6-char passwords)
+    const passwordError = !password ? '비밀번호를 입력해주세요' : null;
 
     setErrors({
       email: emailError,
